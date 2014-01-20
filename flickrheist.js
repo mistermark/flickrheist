@@ -1,3 +1,6 @@
+/**
+ * FlickrHeist photo plugin
+ */
 (function($){
 
     $.fn.flickrHeist = function(options) {
@@ -10,7 +13,7 @@
             REST_URL: 'http://www.flickr.com/services/rest/',
             SEARCH: 'flickr.photos.search',
             GETINFO: 'flickr.photos.getInfo',
-            APIKEY: 'ce2cebcf703d8ab2bdbd5342f16ebcaa',
+            APIKEY: settings.apikey,
             FORMAT: 'json'
         };
 
@@ -51,12 +54,19 @@
         };
         vars.jsonmodel.creation_date = vars.today;
 
+        /**
+         * Start this party!
+         */
         var _init = function(data) {
             vars.status = 'initialized';
             _fetchPhotos();
         };
 
-        var _verifyLocalData = function(data) {
+
+        /**
+         * Check if LocalStorage exists for 'flickrHeist'
+         */
+        var _verifyLocalStorageData = function(data) {
             if(localStorage && localStorage.getItem('flickrHeist')) {
                 return true;
             } else {
@@ -64,37 +74,57 @@
             }
         };
 
-        var _fetchLocalData = function(data) {
-            if(_verifyLocalData(data) === true) {
-                return JSON.parse(localStorage.getItem('flickrHeist'));
-            } else {
-                return data;
+        /**
+         * Are we running 'debug' here?
+         */
+        var _theBugger = function () {
+            if(window.location.search.indexOf("flickrheist=debug")) {
+                settings.debug++;
             }
+            if (settings.debug === true) {
+                settings.debug++;
+            }
+            return settings.debug;
         };
 
-        var _storeLocalData = function(data) { //JSON data comes in
-            
-            if(_verifyLocalData(data) !== true || data.creation_date !== vars.today) {
+
+        /**
+         * Get JSON from LocalStorage
+         */
+        var _fetchLocalStorageData = function() {
+            return JSON.parse(localStorage.getItem('flickrHeist'));
+        };
+
+
+        /**
+         * Store JSON to LocalStorage
+         */
+        var _storeLocalStorageData = function(data) { //JSON data coming in
+            if(_verifyLocalStorageData(data) !== true || data.creation_date !== vars.today) {
                 localStorage.setItem('flickrHeist', JSON.stringify(data));
             }
         };
 
+
+        /**
+         * Generate a random number from length of items
+         */
         var _randomizeItem = function(data) {
-
-            var jsonObj = _fetchLocalData(vars.jsonmodel);
-
-            if(_verifyLocalData() === true && settings.random === true) {
-                return Math.floor(Math.random() * jsonObj.real_total);
-            }
+            return Math.floor(Math.random() * data.real_total);
         };
 
-        //-- Fetch Flicks photos by tag
-        var _fetchPhotos = function() {
-            vars.status = 'fetching-start';
 
-            if (_verifyLocalData(vars.jsonmodel) !== true) {
-                _dropPhoto(_fetchLocalData());
+        /**
+         * Fetch Flicks photos by tag
+         */
+        var _fetchPhotos = function() {
+
+            if (_verifyLocalStorageData(vars.jsonmodel) === true && _theBugger() <= 0) {
+
+                _dropPhoto(_fetchLocalStorageData());
+
             } else {
+
                 $.ajax({
                     url: vars.photoSearchUrl,
                     dataType: 'json',
@@ -123,7 +153,7 @@
                                 });
                             }
                         });
-                        _storeLocalData(vars.jsonmodel);
+                        _storeLocalStorageData(vars.jsonmodel);
                     },
                     complete: function(data) {
                         _dropPhoto(vars.jsonmodel);
@@ -132,16 +162,68 @@
             }
         };
 
-        var _dropPhoto = function(data) {
-            vars.status = 'drophoto';
+        //-- Fetch Flickr photo info
+        var _fetchPhotoInfo = function() {
+            var flickrPhotoGetInfoParams = {
+                'method': FLICKR.GETINFO,
+                'api_key': FLICKR.PARAMS.api_key,
+                'photo_id': photo_id,
+                'format': FLICKR.PARAMS.format,
+                'nojsoncallback': '1'
+            },
+                flickrPhotoInfoParams = $.param(flickrPhotoGetInfoParams),
+                flickrPhotoInfoUrl = FLICKR.REST_URL + '?' + flickrPhotoInfoParams;
 
+            $.ajax({
+                url: flickrPhotoInfoUrl,
+                dataType: 'json',
+                data: JSON,
+                error: function(data) {
+                    console.info('PhotoInfo: error');
+                },
+                success: function(data) {
+                    console.info('PhotoInfo: success');
+                    $.each(photos.items, function(i, object) {
+                        if (object.id === photo_id) {
+
+                            photos.items[i].details.page_url = data.photo.urls.url[0]._content;
+
+                            if (data.photo.location.locality) photos.items[i].details.geo.city = data.photo.location.locality._content;
+                            if (data.photo.location.country) photos.items[i].details.geo.country = data.photo.location.country._content;
+
+                            if (data.photo.owner.realname) {
+                                photos.items[i].details.ownername = data.photo.owner.realname;
+                            } else {
+                                photos.items[i].details.ownername = data.photo.owner.username;
+                            }
+                        }
+                    });
+                },
+                complete: function(data) {
+                    console.info('PhotoInfo: complete');
+                    var $photoDetails = $('<ul/>'),
+                        $photoOwner = $('<li><a href="' + photos.items[settings.random].details.page_url + '" title="' + photos.items[settings.random].details.title._content + '"><i class="fi-social-flickr"></i>' + photos.items[settings.random].details.ownername + '</a></li>'),
+                        $photoLocation = $('<li><i class="fi-marker"></i>' + photos.items[settings.random].details.geo.city + ', ' + photos.items[settings.random].details.geo.country + '</li>');
+
+                    $photoDetails.append($photoOwner, $photoLocation);
+                    $('.cover-details', $targetDOM).html($photoDetails);
+
+                    $targetDOM.removeClass('cover-loading');
+
+                    localStorage.setItem('zeitgeistFlickrPhotosRequest', JSON.stringify(photos));
+                }
+            });
+        };
+
+        var _dropPhoto = function(data) {
+            
             var template = Handlebars.compile(settings.phototemplate);
             vars.target.html( template( data.items[_randomizeItem(data)] ) );
 
-            _complete(data);
+            _complete();
         };
 
-        var _complete = function(data) {
+        var _complete = function() {
             if( $.isFunction(settings.complete) ) {
                 settings.complete.call();
             }
@@ -152,7 +234,9 @@
     };
 
     $.fn.flickrHeist.defaults = {
+        apikey:             null,
         tags:               'zeitgeist', //comma separated list
+        refresh:            24,
         safe_search:        '0', //safe_search on/off
         number_photos:      '31',
         sortby:             'interestingness-desc', //date-posted-asc, date-posted-desc, date-taken-asc, date-taken-desc, interestingness-desc, interestingness-asc, relevance
