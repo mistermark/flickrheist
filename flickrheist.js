@@ -34,9 +34,11 @@
                 'min_upload_date': settings.min_date
             },
             GETINFO: {
+                'method': FLICKR.GETINFO,
                 'api_key': FLICKR.APIKEY,
-                'photo_id': null,
                 'format': FLICKR.FORMAT,
+                'nojsoncallback': '1',
+                'photo_id': null
             }            
         };
 
@@ -52,6 +54,7 @@
             },
             photoSearchUrl: FLICKR.REST_URL + '?' + $.param(FLICKR.PARAMS.SEARCH)
         };
+
         vars.jsonmodel.creation_date = vars.today;
 
         /**
@@ -154,8 +157,6 @@
                             }
                         });
                         _storeLocalStorageData(vars.jsonmodel);
-                    },
-                    complete: function(data) {
                         _dropPhoto(vars.jsonmodel);
                     }
                 });
@@ -163,62 +164,41 @@
         };
 
         //-- Fetch Flickr photo info
-        var _fetchPhotoInfo = function() {
-            var flickrPhotoGetInfoParams = {
-                'method': FLICKR.GETINFO,
-                'api_key': FLICKR.PARAMS.api_key,
-                'photo_id': photo_id,
-                'format': FLICKR.PARAMS.format,
-                'nojsoncallback': '1'
-            },
-                flickrPhotoInfoParams = $.param(flickrPhotoGetInfoParams),
-                flickrPhotoInfoUrl = FLICKR.REST_URL + '?' + flickrPhotoInfoParams;
+        var _fetchPhotoInfo = function(data) {
+            var photo_id = data.id,
+                photoInfoParams = FLICKR.PARAMS.GETINFO,
+                photoInfoUrl = FLICKR.REST_URL + '?' + $.param($.extend(photoInfoParams, {'photo_id': photo_id}));
 
             $.ajax({
-                url: flickrPhotoInfoUrl,
+                url: photoInfoUrl,
                 dataType: 'json',
                 data: JSON,
-                error: function(data) {
-                    console.info('PhotoInfo: error');
+                error: function(data, error, res) {
+                    throw new Error(error);
                 },
                 success: function(data) {
-                    console.info('PhotoInfo: success');
-                    $.each(photos.items, function(i, object) {
-                        if (object.id === photo_id) {
 
-                            photos.items[i].details.page_url = data.photo.urls.url[0]._content;
+                    var photoDetails = {
+                            owner: data.photo.owner.realname || data.photo.owner.username || '',
+                            location: data.photo.location.country._content || '',
+                            url: data.photo.urls.url[0]._content,
+                            title: data.photo.title._content
+                        };
 
-                            if (data.photo.location.locality) photos.items[i].details.geo.city = data.photo.location.locality._content;
-                            if (data.photo.location.country) photos.items[i].details.geo.country = data.photo.location.country._content;
+                    var templateInfo = Handlebars.compile(settings.creditstemplate);
 
-                            if (data.photo.owner.realname) {
-                                photos.items[i].details.ownername = data.photo.owner.realname;
-                            } else {
-                                photos.items[i].details.ownername = data.photo.owner.username;
-                            }
-                        }
-                    });
-                },
-                complete: function(data) {
-                    console.info('PhotoInfo: complete');
-                    var $photoDetails = $('<ul/>'),
-                        $photoOwner = $('<li><a href="' + photos.items[settings.random].details.page_url + '" title="' + photos.items[settings.random].details.title._content + '"><i class="fi-social-flickr"></i>' + photos.items[settings.random].details.ownername + '</a></li>'),
-                        $photoLocation = $('<li><i class="fi-marker"></i>' + photos.items[settings.random].details.geo.city + ', ' + photos.items[settings.random].details.geo.country + '</li>');
-
-                    $photoDetails.append($photoOwner, $photoLocation);
-                    $('.cover-details', $targetDOM).html($photoDetails);
-
-                    $targetDOM.removeClass('cover-loading');
-
-                    localStorage.setItem('zeitgeistFlickrPhotosRequest', JSON.stringify(photos));
+                    vars.target.append(templateInfo( photoDetails ));
                 }
             });
         };
 
         var _dropPhoto = function(data) {
-            
-            var template = Handlebars.compile(settings.phototemplate);
-            vars.target.html( template( data.items[_randomizeItem(data)] ) );
+
+            var singleRandomItem = data.items[_randomizeItem(data)],
+                template = Handlebars.compile(settings.phototemplate);
+
+            _fetchPhotoInfo(singleRandomItem);
+            vars.target.html( template( singleRandomItem ) );
 
             _complete();
         };
@@ -246,7 +226,8 @@
         debug:              true,
         phototemplate:      '<div class="cover-image" style="background-image: url({{details.src}})">',
         creditstemplate:    '<div class="cover-details"><ul class="clearfix">'+
-            '<li class="cover-owner">{{details.title}}</li><li class="cover-location">{{details.place_id}}</li></ul></div>',
+            '<li class="cover-owner"><a href="{{url}}" title="{{title}}">{{owner}}</a></li>'+
+            '<li class="cover-location">{{location}}</li></ul></div>',
         complete:           null
     };
 
