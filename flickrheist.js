@@ -216,7 +216,7 @@
     $.fn.flickrHeist.defaults = {
         apikey:             null,
         tags:               'zeitgeist', //comma separated list
-        refresh:            24,
+        // refresh:            24, //@todo: set time limit to store localstorage json
         safe_search:        '0', //safe_search on/off
         number_photos:      '31',
         sortby:             'interestingness-desc', //date-posted-asc, date-posted-desc, date-taken-asc, date-taken-desc, interestingness-desc, interestingness-asc, relevance
