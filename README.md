@@ -1,4 +1,5 @@
 # FlickrHeist
+
 #### FlickrHeist is a plugin that allows you to use pictures hosted on Flickr to be used for your website's background.
 
 Everybody wants to have some pretty pictures on their website, especially big ones and pretty ones. But not everyone can make beautiful pictures or wants to buy some off of a stock images platform...
